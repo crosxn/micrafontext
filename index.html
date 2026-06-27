@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesli Not Defteri</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --primary: #4a90e2;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --border: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 24px;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background-color: #95a5a6;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+
+        .status-dot.active {
+            background-color: var(--success);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        #status-text {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        #output-box {
+            width: 100%;
+            height: 200px;
+            padding: 15px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            resize: none;
+            font-size: 16px;
+            line-height: 1.5;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s;
+            background-color: #fafafa;
+        }
+
+        #output-box:focus {
+            border-color: var(--primary);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #start-btn { background-color: var(--success); color: white; }
+        #start-btn:hover { background-color: #27ae60; }
+
+        #stop-btn { background-color: var(--danger); color: white; }
+        #stop-btn:hover { background-color: #c0392b; }
+
+        #save-btn { background-color: var(--primary); color: white; grid-column: span 2; }
+        #save-btn:hover { background-color: #357abd; }
+
+        button:disabled {
+            background-color: #bdc3c7 !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Sesli Not Defteri</h1>
+    
+    <div class="status-container">
+        <div id="status-dot" class="status-dot"></div>
+        <span id="status-text">Dinleme kapalı</span>
+    </div>
+
+    <textarea id="output-box" placeholder="Konuşmaya başlamak için 'Başlat' butonuna basın... (Mikrofon izni vermeyi unutmayın)"></textarea>
+
+    <div class="controls">
+        <button id="start-btn">▶ Başlat</button>
+        <button id="stop-btn" disabled>⏸ Durdur</button>
+        <button id="save-btn">💾 Metni Bilgisayara Kaydet (.txt)</button>
+    </div>
+</div>
+
+<script>
+    // Tarayıcı uyumluluğu kontrolü
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+        alert("Maalesef tarayıcınız bu ses tanıma teknolojisini desteklemiyor. Lütfen Google Chrome veya Microsoft Edge kullanın.");
+    }
+
+    const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const outputBox = document.getElementById('output-box');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    if (recognition) {
+        recognition.continuous = true; // Duraksamalarda dinlemeyi kapatma
+        recognition.interimResults = true; // Geçici sonuçları göster
+        recognition.lang = 'tr-TR'; // Dil ayarı Türkçe
+
+        let finalTranscript = '';
+
+        recognition.onstart = () => {
+            statusDot.classList.add('active');
+            statusText.textContent = "Dinleniyor... Konuşun.";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Hata oluştu: ", event.error);
+            if(event.error === 'not-allowed') {
+                alert("Mikrofon izni reddedildi. Lütfen tarayıcı adres çubuğundan mikrofon izni verin.");
+            }
+            resetUI();
+        };
+
+        recognition.onend = () => {
+            resetUI();
+        };
+
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + ' ';
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            
+            // Mevcut metin alanına yazılanları aktar (kullanıcı elle de bir şeyler ekleyebilir)
+            outputBox.value = finalTranscript + interimTranscript;
+        };
+
+        startBtn.addEventListener('click', () => {
+            // Eğer kutu temizlensin istemiyorsan finalTranscript = outputBox.value; yapabilirsin.
+            recognition.start();
+        });
+
+        stopBtn.addEventListener('click', () => {
+            recognition.stop();
+        });
+    }
+
+    function resetUI() {
+        statusDot.classList.remove('active');
+        statusText.textContent = "Dinleme durduruldu";
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+
+    // Verileri .txt dosyası olarak bilgisayara kaydetme fonksiyonu
+    saveBtn.addEventListener('click', () => {
+        const textToSave = outputBox.value.trim();
+        if (!textToSave) {
+            alert("Kaydedilecek herhangi bir metin bulunamadı!");
+            return;
+        }
+
+        const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        
+        // Dosya adı için şu anki tarihi ve saati alalım
+        const date = new Date();
+        const timestamp = `${date.getDate()}-${date.getMonth()+1}-${date.getFullYear()}_${date.getHours()}-${date.getMinutes()}`;
+        
+        a.href = url;
+        a.download = `ses_kaydi_${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+</script>
+
+</body>
+</html>
